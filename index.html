@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学习轨迹图</title>
+    <link rel="stylesheet" href="styles.css?v=1.4">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <!-- 左侧项目管理栏 -->
+    <div class="sidebar">
+        <h3>学习轨迹项目</h3>
+        <button id="newProjectBtn" class="btn btn-primary">新建项目</button>
+        <div class="project-list">
+            <h4>最近项目</h4>
+            <ul id="recentProjects"></ul>
+        </div>
+        
+        <!-- 归档项目模块 -->
+        <div class="archive-section">
+            <div class="archive-header">
+                <h4>归档项目</h4>
+                <button id="manageArchiveCategoriesBtn" class="btn-icon" title="管理分类">
+                    <i class="fas fa-cog"></i>
+                </button>
+            </div>
+            <div id="archiveProjects" class="archive-projects"></div>
+        </div>
+    </div>
+
+    <!-- 主内容区 -->
+    <div class="main-content">
+        <!-- 工具栏 -->
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <span id="currentProjectName">请选择或创建项目</span>
+            </div>
+            <div class="toolbar-right">
+                <button id="saveBtn" class="button button-secondary">保存</button>
+            </div>
+        </div>
+
+        <!-- 画布容器 -->
+        <div class="canvas-container">
+            <svg id="canvas" class="canvas">
+                <!-- 连接线层 -->
+                <g id="connectionsLayer"></g>
+                <!-- 节点层 -->
+                <g id="nodesLayer"></g>
+            </svg>
+        </div>
+    </div>
+
+    <!-- 右键菜单 -->
+    <div id="contextMenu" class="context-menu">
+        <div class="menu-item" id="createNode">
+            <span>➕</span>
+            <span>新建节点</span>
+        </div>
+        <div class="menu-separator" id="menuSeparator"></div>
+        <div class="menu-item" id="editNode">
+            <span>✏️</span>
+            <span>编辑节点</span>
+        </div>
+        <div class="menu-item" id="toggleImportance">
+            <span>⭐</span>
+            <span>标记重要</span>
+        </div>
+        <div class="menu-item" id="deleteNode">
+            <span>🗑️</span>
+            <span>删除节点</span>
+        </div>
+    </div>
+
+    <!-- 新建项目模态框 -->
+    <div class="modal" id="projectModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>新建项目</h3>
+                <button class="modal-close" id="modalClose">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="projectNameInput">项目名称</label>
+                    <input type="text" id="projectNameInput" placeholder="输入项目名称" maxlength="50">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="button button-secondary" id="modalCancel">取消</button>
+                <button class="button button-primary" id="modalConfirm">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑节点模态框 -->
+    <div class="modal" id="editNodeModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>编辑节点</h3>
+                <span class="close" id="editModalClose">&times;</span>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="editNodeInput" placeholder="请输入节点名称" class="modal-input">
+            </div>
+            <div class="modal-footer">
+                <button id="editModalCancel" class="btn btn-secondary">取消</button>
+                <button id="editModalConfirm" class="btn btn-primary">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加资源模态框 -->
+    <div class="modal" id="resourceModal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>添加资源</h3>
+                <span class="close" id="resourceModalClose">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="resourceType">资源类型：</label>
+                    <select id="resourceType" class="modal-input">
+                        <option value="link">链接</option>
+                        <option value="note">笔记</option>
+                        <option value="image">图片</option>
+                        <option value="document">文档</option>
+                        <option value="code">代码片段</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="resourceTitle">标题：</label>
+                    <input type="text" id="resourceTitle" placeholder="请输入资源标题" class="modal-input">
+                </div>
+                <div class="form-group" id="resourceUrlGroup">
+                    <label for="resourceUrl">链接地址：</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="url" id="resourceUrl" placeholder="请输入链接地址" style="flex: 1;">
+                        <button type="button" id="copyUrlBtn" class="btn btn-secondary" style="padding: 8px 12px;">复制</button>
+                    </div>
+                </div>
+                <div class="form-group" id="resourceFileGroup" style="display: none;">
+                    <label for="resourceFile">文件上传：</label>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <input type="file" id="resourceFileInput" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.jpg,.jpeg,.png,.gif,.bmp,.webp" style="padding: 8px;">
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" id="resourceFile" placeholder="或手动输入文件路径" style="flex: 1;">
+                            <button type="button" id="copyFileBtn" class="btn btn-secondary" style="padding: 8px 12px;">复制路径</button>
+                        </div>
+                        <div id="filePreview" style="display: none; padding: 8px; background: #f8f9fa; border-radius: 4px; font-size: 0.9rem;">
+                            <span id="fileName"></span>
+                            <button type="button" id="removeFileBtn" style="margin-left: 10px; padding: 2px 6px; background: #dc3545; color: white; border: none; border-radius: 3px; font-size: 0.8rem;">移除</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group" id="resourceContentGroup" style="display: none;">
+                    <label for="resourceContent">内容：</label>
+                    <textarea id="resourceContent" placeholder="请输入内容" class="modal-textarea"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="resourceModalCancel" class="btn btn-secondary">取消</button>
+                <button id="resourceModalConfirm" class="btn btn-primary">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右侧资源管理侧边栏 -->
+    <div id="resourceSidebar" class="resource-sidebar">
+        <div class="sidebar-resize-handle"></div>
+        <div class="sidebar-header">
+            <h3><i class="fas fa-bookmark"></i> 资源管理</h3>
+            <button id="closeSidebar" class="sidebar-close">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="sidebar-content">
+            <div id="selectedNodeInfo" class="selected-node-info">
+                <p>请选择一个节点查看资源</p>
+            </div>
+            
+            <div id="resourceContent" class="resource-content">
+                <div class="resource-panel">
+                    <div class="resource-layout">
+                        <!-- 左侧分类导航 -->
+                        <div class="category-sidebar">
+                            <div class="category-header">
+                                <h4><i class="fas fa-tags"></i> 分类</h4>
+                                <button id="manageCategoriesBtn" class="btn-manage-categories" title="管理分类">
+                                    <i class="fas fa-cog"></i>
+                                </button>
+                            </div>
+                            <div class="resource-categories" id="resourceCategories">
+                                <div class="category-item active" data-category="all">
+                                    <i class="fas fa-folder"></i> 全部资源
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 右侧资源内容 -->
+                        <div class="resource-main-content">
+                            <div class="resource-search">
+                                <input type="text" id="resourceSearch" placeholder="搜索资源...">
+                            </div>
+                            <div id="resourceList" class="resource-list">
+                                <!-- 资源列表将在这里动态生成 -->
+                            </div>
+                            <div class="resource-actions">
+                                <button id="addResourceBtnBottom" class="btn btn-primary">
+                                    <i class="fas fa-plus"></i> 添加资源
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 分类管理模态框 -->
+    <div id="categoryModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>分类管理</h3>
+                <span class="modal-close" id="categoryModalClose">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="category-management">
+                    <div class="add-category-section">
+                        <h4>添加新分类</h4>
+                        <div class="form-group">
+                            <input type="text" id="newCategoryName" placeholder="分类名称">
+                            <select id="newCategoryIcon">
+                                <option value="fas fa-folder">📁 文件夹</option>
+                                <option value="fas fa-book">📚 书本</option>
+                                <option value="fas fa-tools">🔧 工具</option>
+                                <option value="fas fa-video">📹 视频</option>
+                                <option value="fas fa-image">🖼️ 图片</option>
+                                <option value="fas fa-code">💻 代码</option>
+                                <option value="fas fa-star">⭐ 收藏</option>
+                            </select>
+                            <button id="addCategoryBtn" class="btn btn-primary">添加</button>
+                        </div>
+                    </div>
+                    <div class="existing-categories">
+                        <h4>现有分类</h4>
+                        <div id="categoryList" class="category-list">
+                            <!-- 动态生成分类列表 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="categoryModalClose2" class="btn btn-secondary">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 归档分类管理模态框 -->
+    <div id="archiveCategoryModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>管理归档分类</h3>
+                <span id="archiveCategoryModalClose" class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="category-management">
+                    <div class="add-category-section">
+                        <input type="text" id="newArchiveCategoryName" placeholder="输入新分类名称" maxlength="20">
+                        <button id="addArchiveCategoryBtn" class="btn btn-primary">添加分类</button>
+                    </div>
+                    <div class="category-list-section">
+                        <h4>现有分类</h4>
+                        <div id="archiveCategoryList" class="archive-category-list"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="archiveCategoryModalClose2" class="btn btn-secondary">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js?v=2.0"></script>
+</body>
+</html>
