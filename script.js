@@ -529,31 +529,31 @@ function setupEventListeners() {
             e.preventDefault();
             
             if (e.ctrlKey) {
-                // Ctrl + 滚轮缩放
+                // Ctrl+滚轮缩放
                 const zoomSpeed = 0.1;
                 const zoomDelta = e.deltaY > 0 ? -zoomSpeed : zoomSpeed;
                 
                 // 限制缩放范围
-                const newScale = Math.max(0.3, Math.min(3.0, appState.canvasScale + zoomDelta));
+                const newScale = Math.max(0.3, Math.min(3.0, canvasRenderer.scale + zoomDelta));
                 
-                if (newScale !== appState.canvasScale) {
+                if (newScale !== canvasRenderer.scale) {
                     // 获取鼠标在画布上的位置
                     const rect = elements.canvas.getBoundingClientRect();
                     const mouseX = e.clientX - rect.left;
                     const mouseY = e.clientY - rect.top;
                     
                     // 计算缩放前鼠标在画布坐标系中的位置
-                    const worldX = (mouseX - appState.canvasOffset.x) / appState.canvasScale;
-                    const worldY = (mouseY - appState.canvasOffset.y) / appState.canvasScale;
+                    const worldX = (mouseX - canvasRenderer.translateX) / canvasRenderer.scale;
+                    const worldY = (mouseY - canvasRenderer.translateY) / canvasRenderer.scale;
                     
                     // 更新缩放比例
-                    appState.canvasScale = newScale;
+                    canvasRenderer.scale = newScale;
                     
                     // 调整偏移量，使鼠标位置保持不变
-                    appState.canvasOffset.x = mouseX - worldX * appState.canvasScale;
-                    appState.canvasOffset.y = mouseY - worldY * appState.canvasScale;
+                    canvasRenderer.translateX = mouseX - worldX * canvasRenderer.scale;
+                    canvasRenderer.translateY = mouseY - worldY * canvasRenderer.scale;
                     
-                    canvasRenderer.render();
+                    canvasRenderer.applyTransform();
                 }
             } else {
                 // 普通滚轮上下滑动
@@ -561,8 +561,8 @@ function setupEventListeners() {
                 const deltaY = e.deltaY > 0 ? scrollSpeed : -scrollSpeed;
                 
                 // 更新画布偏移
-                appState.canvasOffset.y += deltaY;
-                canvasRenderer.render();
+                canvasRenderer.translateY += deltaY;
+                canvasRenderer.applyTransform();
             }
         });
 
@@ -572,6 +572,82 @@ function setupEventListeners() {
                 connectionManager.exitConnectionMode();
             }
             contextMenuManager.hideMenu();
+        });
+
+        // 画布拖拽移动功能
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let lastTransformX = 0;
+        let lastTransformY = 0;
+
+        elements.canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 0 && e.target === elements.canvas) { // 左键且点击在画布空白处
+                isDragging = true;
+                dragStartX = e.clientX;
+                dragStartY = e.clientY;
+                
+                // 获取当前的transform值
+                const nodesLayer = document.getElementById('nodesLayer');
+                const connectionsLayer = document.getElementById('connectionsLayer');
+                if (nodesLayer && connectionsLayer) {
+                    const transform = nodesLayer.style.transform || '';
+                    const match = transform.match(/translate\(([^,]+),([^)]+)\)/);
+                    if (match) {
+                        lastTransformX = parseFloat(match[1]) || 0;
+                        lastTransformY = parseFloat(match[2]) || 0;
+                    }
+                }
+                
+                elements.canvas.style.cursor = 'grabbing';
+                e.preventDefault();
+            }
+        });
+
+        elements.canvas.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const deltaX = e.clientX - dragStartX;
+                const deltaY = e.clientY - dragStartY;
+                
+                const newTransformX = lastTransformX + deltaX;
+                const newTransformY = lastTransformY + deltaY;
+                
+                const nodesLayer = document.getElementById('nodesLayer');
+                const connectionsLayer = document.getElementById('connectionsLayer');
+                
+                if (nodesLayer && connectionsLayer) {
+                    const transform = `translate(${newTransformX}px, ${newTransformY}px) scale(${canvasRenderer.scale})`;
+                    nodesLayer.style.transform = transform;
+                    connectionsLayer.style.transform = transform;
+                }
+                
+                e.preventDefault();
+            }
+        });
+
+        elements.canvas.addEventListener('mouseup', (e) => {
+            if (isDragging) {
+                isDragging = false;
+                elements.canvas.style.cursor = 'default';
+                
+                // 更新最终的transform值
+                const deltaX = e.clientX - dragStartX;
+                const deltaY = e.clientY - dragStartY;
+                lastTransformX = lastTransformX + deltaX;
+                lastTransformY = lastTransformY + deltaY;
+                
+                // 保存画布位置状态
+                canvasRenderer.translateX = lastTransformX;
+                canvasRenderer.translateY = lastTransformY;
+            }
+        });
+
+        // 防止拖拽时离开画布导致的问题
+        elements.canvas.addEventListener('mouseleave', (e) => {
+            if (isDragging) {
+                isDragging = false;
+                elements.canvas.style.cursor = 'default';
+            }
         });
     }
 
@@ -604,12 +680,16 @@ function setupEventListeners() {
     if (elements.editModalClose) {
         elements.editModalClose.addEventListener('click', () => {
             elements.editNodeModal.style.display = 'none';
+            // 关闭编辑时也清除currentNode引用
+            contextMenuManager.currentNode = null;
         });
     }
 
     if (elements.editModalCancel) {
         elements.editModalCancel.addEventListener('click', () => {
             elements.editNodeModal.style.display = 'none';
+            // 取消编辑时也清除currentNode引用
+            contextMenuManager.currentNode = null;
         });
     }
 
@@ -620,6 +700,14 @@ function setupEventListeners() {
                 contextMenuManager.currentNode.title = newTitle;
                 canvasRenderer.render();
                 projectManager.saveToStorage();
+                elements.editNodeModal.style.display = 'none';
+                // 编辑完成后清除currentNode引用
+                contextMenuManager.currentNode = null;
+            } else if (!newTitle) {
+                alert('节点名称不能为空');
+                elements.editNodeInput.focus();
+            } else if (!contextMenuManager.currentNode) {
+                alert('未找到要编辑的节点');
                 elements.editNodeModal.style.display = 'none';
             }
         });
@@ -745,6 +833,10 @@ function setupEventListeners() {
 
 // 画布渲染系统
 const canvasRenderer = {
+    scale: 1,
+    translateX: 0,
+    translateY: 0,
+    
     // 渲染整个画布
     render() {
         if (!appState.currentProject) {
@@ -753,6 +845,19 @@ const canvasRenderer = {
         }
         this.renderNodes();
         this.renderConnections();
+        this.applyTransform();
+    },
+    
+    // 应用变换
+    applyTransform() {
+        const nodesLayer = document.getElementById('nodesLayer');
+        const connectionsLayer = document.getElementById('connectionsLayer');
+        
+        if (nodesLayer && connectionsLayer) {
+            const transform = `translate(${this.translateX}px, ${this.translateY}px) scale(${this.scale})`;
+            nodesLayer.style.transform = transform;
+            connectionsLayer.style.transform = transform;
+        }
     },
 
     // 清空画布
@@ -771,9 +876,6 @@ const canvasRenderer = {
         
         elements.nodesLayer.innerHTML = '';
         
-        // 应用缩放和偏移变换
-        elements.nodesLayer.style.transform = `translate(${appState.canvasOffset.x}px, ${appState.canvasOffset.y}px) scale(${appState.canvasScale})`;
-        
         appState.currentProject.nodes.forEach(node => {
             const nodeElement = this.createNodeElement(node);
             if (nodeElement) {
@@ -787,9 +889,6 @@ const canvasRenderer = {
         if (!elements.connectionsLayer || !appState.currentProject) return;
         
         elements.connectionsLayer.innerHTML = '';
-        
-        // 应用缩放和偏移变换
-        elements.connectionsLayer.style.transform = `translate(${appState.canvasOffset.x}px, ${appState.canvasOffset.y}px) scale(${appState.canvasScale})`;
         
         appState.currentProject.connections.forEach(connection => {
             const connectionElement = this.createConnectionElement(connection);
@@ -1092,7 +1191,9 @@ const contextMenuManager = {
         elements.editNodeInput.value = this.currentNode.title;
         elements.editNodeModal.style.display = 'flex';
         elements.editNodeInput.focus();
-        this.hideMenu();
+        
+        // 隐藏右键菜单但保留currentNode引用
+        elements.contextMenu.style.display = 'none';
     },
 
     // 切换节点重要性
