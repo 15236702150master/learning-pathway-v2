@@ -914,6 +914,35 @@ const canvasRenderer = {
         line.setAttribute('stroke-width', '2');
         line.setAttribute('stroke-dasharray', '5,5');
         line.classList.add('connection-line');
+        line.setAttribute('data-connection-id', connection.id);
+        
+        // 添加右键点击事件来删除连接线
+        line.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            if (confirm('确定要删除这条连接线吗？')) {
+                // 从项目中删除连接
+                appState.currentProject.removeConnection(connection.id);
+                // 重新渲染连接线
+                canvasRenderer.renderConnections();
+                // 保存到存储
+                projectManager.saveToStorage();
+            }
+        });
+        
+        // 添加鼠标悬停效果
+        line.addEventListener('mouseenter', () => {
+            line.setAttribute('stroke', '#ff6b6b');
+            line.setAttribute('stroke-width', '3');
+            line.style.cursor = 'pointer';
+        });
+        
+        line.addEventListener('mouseleave', () => {
+            line.setAttribute('stroke', '#a98ad9');
+            line.setAttribute('stroke-width', '2');
+            line.style.cursor = 'default';
+        });
 
         return line;
     },
